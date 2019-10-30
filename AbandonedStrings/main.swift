@@ -80,13 +80,14 @@ func extractStringIdentifierFromTrimmedLine(_ line: String) -> String {
 
 // MARK: - Abandoned identifier detection
 
-func findStringIdentifiersIn(_ stringsFile: String, abandonedBySourceCode sourceCode: String) -> [String] {
+func findStringIdentifiersIn(_ stringsFile: String, abandonedBySourceCode sourceCode: String, excludes: [String]) -> [String] {
     return extractStringIdentifiersFrom(stringsFile).filter { identifier in
         let quotedIdentifier = "\"\(identifier)\""
         let quotedIdentifierForStoryboard = "\"@\(identifier)\""
         let signalQuotedIdentifierForJs = "'\(identifier)'"
         let isAbandoned = (sourceCode.contains(quotedIdentifier) == false && sourceCode.contains(quotedIdentifierForStoryboard) == false &&
-            sourceCode.contains(signalQuotedIdentifierForJs) == false)
+            sourceCode.contains(signalQuotedIdentifierForJs) == false) &&
+            excludes.first(where: { identifier.hasPrefix($0) }) == nil
         return isAbandoned
     }
 }
@@ -104,14 +105,14 @@ func stringsFile(_ stringsFile: String, without identifiers: [String]) -> String
 
 typealias StringsFileToAbandonedIdentifiersMap = [String: [String]]
 
-func findAbandonedIdentifiersIn(_ rootDirectories: [String], withStoryboard: Bool) -> StringsFileToAbandonedIdentifiersMap {
+func findAbandonedIdentifiersIn(_ rootDirectories: [String], withStoryboard: Bool, excludes: [String]) -> StringsFileToAbandonedIdentifiersMap {
     var map = StringsFileToAbandonedIdentifiersMap()
     let sourceCode = concatenateAllSourceCodeIn(rootDirectories, withStoryboard: withStoryboard)
     let stringsFiles = findFilesIn(rootDirectories, withExtensions: ["strings"])
     for stringsFile in stringsFiles {
         dispatchGroup.enter()
         DispatchQueue.global().async {
-            let abandonedIdentifiers = findStringIdentifiersIn(stringsFile, abandonedBySourceCode: sourceCode)
+            let abandonedIdentifiers = findStringIdentifiersIn(stringsFile, abandonedBySourceCode: sourceCode, excludes: excludes)
             if abandonedIdentifiers.isEmpty == false {
                 serialWriterQueue.async {
                     map[stringsFile] = abandonedIdentifiers
@@ -132,7 +133,9 @@ func findAbandonedIdentifiersIn(_ rootDirectories: [String], withStoryboard: Boo
 func getRootDirectories() -> [String]? {
     var c = [String]()
     for arg in CommandLine.arguments {
-        c.append(arg)
+        if !arg.hasPrefix("--") {
+            c.append(arg)
+        }
     }
     c.remove(at: 0)
     if isOptionalParameterForStoryboardAvailable() {
@@ -162,10 +165,27 @@ func displayAbandonedIdentifiersInMap(_ map: StringsFileToAbandonedIdentifiersMa
     }
 }
 
+func prefixesToExclude() -> [String] {
+    let commandPrefix = "--exclude="
+    return CommandLine.arguments.compactMap( { argument in
+        if argument.hasPrefix(commandPrefix) {
+            guard let index = argument.firstIndex(of: "=") else { return nil }
+            let pattern = argument[argument.index(index, offsetBy: 1)...]
+            return String(pattern)
+        } else {
+            return nil
+        }
+    })
+}
+
 if let rootDirectories = getRootDirectories() {
     print("Searching for abandoned resource strings…")
     let withStoryboard = isOptionalParameterForStoryboardAvailable()
-    let map = findAbandonedIdentifiersIn(rootDirectories, withStoryboard: withStoryboard)
+
+    //excludedPrefixes
+
+    let prefixes: [String] = prefixesToExclude()
+    let map = findAbandonedIdentifiersIn(rootDirectories, withStoryboard: withStoryboard, excludes: prefixes)
     if map.isEmpty {
         print("No abandoned resource strings were detected.")
     }
