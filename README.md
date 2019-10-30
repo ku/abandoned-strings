@@ -8,6 +8,12 @@ Open a Terminal to the directory which contains the *AbandonedStrings* executabl
 
 `$ ./AbandonedStrings /Users/your-username/path/to/source/code`
 
+### Option
+
+```
+--exclude=Localizable.String.Prefix
+```
+
 ## What to expect
 If a `.strings` file contains… 
 
