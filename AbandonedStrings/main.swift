@@ -41,9 +41,9 @@ func contentsOfFile(_ filePath: String) -> String {
     do {
         return try String(contentsOfFile: filePath)
     }
-    catch { 
-        print("cannot read file!!!")
-        exit(1)
+    catch {
+        print(error.localizedDescription, filePath)
+        return ""
     }
 }
 
